@@ -77,7 +77,7 @@ jobs:
         7z x mpv-dev.7z mpv-2.dll
     - name: Build with PyInstaller
       run: |
-        pyinstaller --noconfirm --onefile --windowed --add-binary "mpv-2.dll;." --collect-all textual --collect-all ytmusicapi --name T-Music run.py
+        pyinstaller --noconfirm --onefile --add-binary "mpv-2.dll;." --collect-all textual --collect-all ytmusicapi --name T-Music run.py
     - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:

@@ -1,12 +1,33 @@
-from mpris_server.server import Server
-from mpris_server.adapters import MprisAdapter
-from mpris_server import PlayState
-from mpris_server.base import dbus_emit_changes
-from gi.repository import GLib
+import sys
 import threading
+
+class DummyAdapter:
+    def __init__(self):
+        self.on_next = None
+        self.on_previous = None
+    def update_metadata(self, *args, **kwargs): pass
+    def emit_properties_changed(self, *args, **kwargs): pass
+
+class DummyMPRISController:
+    def __init__(self, *args, **kwargs):
+        self.adapter = DummyAdapter()
+    def start(self): pass
+
+try:
+    from mpris_server.server import Server
+    from mpris_server.adapters import MprisAdapter
+    from mpris_server import PlayState
+    from mpris_server.base import dbus_emit_changes
+    from gi.repository import GLib
+    MPRIS_AVAILABLE = True
+except ImportError:
+    MPRIS_AVAILABLE = False
+    MprisAdapter = object # Dummy base class
+    PlayState = None
 
 class TMusicAdapter(MprisAdapter):
     def __init__(self, audio_engine):
+        if not MPRIS_AVAILABLE: return
         super().__init__()
         self.engine = audio_engine
         self.current_title = "T-Music"
@@ -18,8 +39,6 @@ class TMusicAdapter(MprisAdapter):
     def emit_properties_changed(self, changed_props):
         if getattr(self, 'server', None) and getattr(self.server, 'player', None):
             try:
-                # changed_props can be a list of strings, or a dict. 
-                # If dict, we just extract keys to let mpris_server fetch the property.
                 props = list(changed_props.keys()) if isinstance(changed_props, dict) else changed_props
                 dbus_emit_changes(self.server.player, props)
             except Exception:
@@ -40,43 +59,24 @@ class TMusicAdapter(MprisAdapter):
         self.engine.toggle_pause()
 
     def next(self):
-        if self.on_next:
-            self.on_next()
+        if self.on_next: self.on_next()
 
     def previous(self):
-        if self.on_previous:
-            self.on_previous()
+        if self.on_previous: self.on_previous()
 
     def get_current_position(self):
         time_pos = getattr(self.engine.player, 'time_pos', 0)
         return int(time_pos * 1000000) if time_pos else 0
 
-    def get_volume(self):
-        return 1.0
-
-    def get_shuffle(self):
-        return False
-
-    def get_rate(self):
-        return 1.0
-
-    def can_control(self):
-        return True
-
-    def can_pause(self):
-        return True
-
-    def can_play(self):
-        return True
-
-    def can_go_next(self):
-        return True
-
-    def can_go_previous(self):
-        return True
-
-    def can_seek(self):
-        return False
+    def get_volume(self): return 1.0
+    def get_shuffle(self): return False
+    def get_rate(self): return 1.0
+    def can_control(self): return True
+    def can_pause(self): return True
+    def can_play(self): return True
+    def can_go_next(self): return True
+    def can_go_previous(self): return True
+    def can_seek(self): return False
 
     def get_playstate(self):
         if getattr(self.engine.player, 'core_idle', True):
@@ -98,6 +98,11 @@ class TMusicAdapter(MprisAdapter):
             'xesam:title': self.current_title,
             'xesam:artist': [self.current_artist]
         }
+
+def get_mpris_controller(engine):
+    if not MPRIS_AVAILABLE:
+        return DummyMPRISController(engine)
+    return MPRISController(engine)
 
 class MPRISController:
     def __init__(self, audio_engine):

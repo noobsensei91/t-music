@@ -1,6 +1,6 @@
 from src.audio import AudioEngine
 from src.provider import MusicProvider
-from src.mpris import MPRISController
+from src.mpris import get_mpris_controller
 from src.tui import TMusicApp
 import sys
 
@@ -8,7 +8,7 @@ def main():
     try:
         engine = AudioEngine()
         provider = MusicProvider()
-        mpris = MPRISController(engine)
+        mpris = get_mpris_controller(engine)
         
         app = TMusicApp(audio_engine=engine, music_provider=provider, mpris=mpris)
         app.run()
