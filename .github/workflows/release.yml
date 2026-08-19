@@ -1,0 +1,104 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller --onefile --name tmusic --collect-all textual --collect-all ytmusicapi run.py
+    - name: Setup AppImage toolkit
+      run: |
+        wget "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+        chmod +x appimagetool-x86_64.AppImage
+        mkdir -p AppDir/usr/bin
+        cp dist/tmusic AppDir/usr/bin/
+        cp icon.jpg AppDir/icon.png || true
+        cat << 'APP' > AppDir/tmusic.desktop
+        [Desktop Entry]
+        Version=1.0
+        Name=T-Music
+        Comment=Terminal YouTube Music Player
+        Exec=tmusic
+        Icon=icon
+        Terminal=true
+        Type=Application
+        Categories=AudioVideo;Audio;Player;
+        APP
+        cat << 'RUN' > AppDir/AppRun
+        #!/bin/bash
+        HERE="$(dirname "$(readlink -f "${0}")")"
+        export PATH="${HERE}/usr/bin:${PATH}"
+        exec tmusic "$@"
+        RUN
+        chmod +x AppDir/AppRun
+    - name: Create AppImage
+      run: |
+        ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir T-Music-Linux-x86_64.AppImage
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: T-Music-Linux
+        path: T-Music-Linux-x86_64.AppImage
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+    - name: Download libmpv Windows DLL
+      shell: bash
+      run: |
+        # Download the shinchiro windows build which contains mpv-2.dll
+        curl -sL "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20231210-git-1a5dd46.7z/download" -L -o mpv-dev.7z
+        7z x mpv-dev.7z mpv-2.dll
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller --noconfirm --onefile --windowed --add-binary "mpv-2.dll;." --collect-all textual --collect-all ytmusicapi --name T-Music run.py
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: T-Music-Windows
+        path: dist/T-Music.exe
+
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: T-Music-Linux
+      - uses: actions/download-artifact@v3
+        with:
+          name: T-Music-Windows
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            T-Music-Linux-x86_64.AppImage
+            T-Music.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
