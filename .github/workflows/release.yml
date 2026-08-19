@@ -74,9 +74,11 @@ jobs:
     - name: Download libmpv Windows DLL
       shell: bash
       run: |
-        # Download the shinchiro windows build which contains mpv-2.dll
-        curl -sL "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20231210-git-1a5dd46.7z/download" -L -o mpv-dev.7z
-        7z x mpv-dev.7z mpv-2.dll
+        # Download the latest shinchiro windows build
+        MPV_URL=$(curl -sL https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest | grep browser_download_url | grep mpv-dev-x86_64-v3 | head -n 1 | awk '{print $2}' | tr -d '"')
+        curl -sL "$MPV_URL" -o mpv-dev.7z
+        7z x mpv-dev.7z libmpv-2.dll
+        mv libmpv-2.dll mpv-2.dll
     - name: Build with PyInstaller
       run: |
         pyinstaller --noconfirm --onefile --add-binary "mpv-2.dll;." --collect-all textual --collect-all ytmusicapi --name T-Music run.py
