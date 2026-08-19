@@ -9,7 +9,9 @@ import time
 import threading
 
 class PlayerBar(Static):
+    status_text = ""
     def update_status(self, text: str):
+        self.status_text = text
         self.update(text)
 
 class TMusicApp(App):
@@ -22,6 +24,8 @@ class TMusicApp(App):
         ("n", "next_track", "Next"),
         ("+", "volume_up", "Vol +"),
         ("-", "volume_down", "Vol -"),
+        ("a", "add_selected", "Add"),
+        ("A", "add_all", "Add All"),
     ]
 
     def __init__(self, audio_engine: AudioEngine, music_provider: MusicProvider, mpris: MPRISController):
@@ -77,36 +81,95 @@ class TMusicApp(App):
 
     @work(thread=True)
     def perform_search(self, query: str):
-        results = self.provider.search(query)
-        self.call_from_thread(self.update_search_results, results)
+        if query.startswith("pl: "):
+            results = self.provider.search_playlists(query[4:])
+            self.call_from_thread(self.update_search_results, results, is_playlist=True)
+        elif query == "my_playlists":
+            results = self.provider.get_user_playlists()
+            self.call_from_thread(self.update_search_results, results, is_playlist=True)
+        else:
+            results = self.provider.search(query)
+            self.call_from_thread(self.update_search_results, results, is_playlist=False)
 
-    def update_search_results(self, results):
+    def update_search_results(self, results, is_playlist=False):
         table = self.query_one("#search-results", DataTable)
         table.clear()
         for res in results:
+            if is_playlist:
+                table.add_row(f"📂 {res['title']}", f"{res['author']} ({res['itemCount']})", f"pl:{res['browseId']}")
+            else:
+                artists_str = ", ".join(res['artists'])
+                table.add_row(res['title'], artists_str, res['videoId'])
+        self.query_one(PlayerBar).update_status("Search complete. Press Enter to play/load, 'a' to add to queue, 'A' to add all.")
+
+    @work(thread=True)
+    def load_playlist_tracks(self, browse_id: str):
+        self.call_from_thread(self.query_one(PlayerBar).update_status, "Fetching playlist tracks...")
+        tracks = self.provider.get_playlist_tracks(browse_id)
+        self.call_from_thread(self.add_tracks_to_queue_and_play, tracks)
+
+    def add_tracks_to_queue_and_play(self, tracks):
+        start_index = len(self.playlist)
+        for res in tracks:
             artists_str = ", ".join(res['artists'])
-            table.add_row(res['title'], artists_str, res['videoId'])
-        self.query_one(PlayerBar).update_status("Search complete. Press Enter on a song to play.")
+            self.playlist.append({"title": res['title'], "artist": artists_str, "id": res['videoId']})
+            playlist_table = self.query_one("#playlist-table", DataTable)
+            marker = ">>" if len(self.playlist) - 1 == self.current_song_index + 1 else "  "
+            playlist_table.add_row(marker, res['title'], artists_str)
+            
+        self.query_one(PlayerBar).update_status(f"Added {len(tracks)} tracks to queue.")
+        if self.current_song_index == -1 or not self.engine.is_playing():
+            self.play_track(start_index)
 
     async def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if event.data_table.id == "search-results":
             row_data = event.data_table.get_row(event.row_key)
-            title, artist, video_id = row_data
+            title, artist, item_id = row_data
             
-            # Add to playlist
-            self.playlist.append({"title": title, "artist": artist, "id": video_id})
-            
+            if item_id.startswith("pl:"):
+                browse_id = item_id[3:]
+                if browse_id != "ERROR":
+                    self.load_playlist_tracks(browse_id)
+                return
+
+            self.playlist.append({"title": title, "artist": artist, "id": item_id})
             playlist_table = self.query_one("#playlist-table", DataTable)
             marker = ">>" if len(self.playlist) - 1 == self.current_song_index + 1 else "  "
             playlist_table.add_row(marker, title, artist)
             
-            # If nothing is playing, play it
             if self.current_song_index == -1 or not self.engine.is_playing():
                 self.play_track(len(self.playlist) - 1)
                 
         elif event.data_table.id == "playlist-table":
             row_index = event.data_table.get_row_index(event.row_key)
             self.play_track(row_index)
+
+    def action_add_selected(self) -> None:
+        table = self.query_one("#search-results", DataTable)
+        try:
+            row_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
+            row_data = table.get_row(row_key)
+            title, artist, item_id = row_data
+            if not item_id.startswith("pl:"):
+                self.playlist.append({"title": title, "artist": artist, "id": item_id})
+                playlist_table = self.query_one("#playlist-table", DataTable)
+                playlist_table.add_row("  ", title, artist)
+                self.query_one(PlayerBar).update_status(f"Added '{title}' to queue.")
+        except:
+            pass
+
+    def action_add_all(self) -> None:
+        table = self.query_one("#search-results", DataTable)
+        added = 0
+        for row_key in table.rows:
+            title, artist, item_id = table.get_row(row_key)
+            if not item_id.startswith("pl:"):
+                self.playlist.append({"title": title, "artist": artist, "id": item_id})
+                playlist_table = self.query_one("#playlist-table", DataTable)
+                playlist_table.add_row("  ", title, artist)
+                added += 1
+        if added > 0:
+            self.query_one(PlayerBar).update_status(f"Added {added} tracks to queue.")
 
     def play_track(self, index: int):
         if index < 0 or index >= len(self.playlist):
@@ -139,27 +202,29 @@ class TMusicApp(App):
         self.query_one(PlayerBar).update_status(f"{state_str} | {self.current_song_name}")
 
     def action_toggle_mute(self) -> None:
-        self.engine.player.mute = not getattr(self.engine.player, 'mute', False)
+        is_mute = not getattr(self.engine.player, 'mute', False)
+        self.engine.player.mute = is_mute
+        self.query_one(PlayerBar).update_status(f"{'🔇 Muted' if is_mute else '🔊 Unmuted'}")
 
     def action_volume_up(self) -> None:
         vol = getattr(self.engine.player, 'volume', 100)
-        self.engine.player.volume = min(100, vol + 10)
+        new_vol = min(100, vol + 10)
+        self.engine.player.volume = new_vol
+        self.query_one(PlayerBar).update_status(f"🔊 Volume: {new_vol}%")
 
     def action_volume_down(self) -> None:
         vol = getattr(self.engine.player, 'volume', 100)
-        self.engine.player.volume = max(0, vol - 10)
+        new_vol = max(0, vol - 10)
+        self.engine.player.volume = new_vol
+        self.query_one(PlayerBar).update_status(f"🔉 Volume: {new_vol}%")
 
     def action_next_track(self) -> None:
         if self.current_song_index + 1 < len(self.playlist):
             self.play_track(self.current_song_index + 1)
-        else:
-            self.query_one(PlayerBar).update_status("No next track in queue.")
 
     def action_prev_track(self) -> None:
         if self.current_song_index > 0:
             self.play_track(self.current_song_index - 1)
-        else:
-            self.query_one(PlayerBar).update_status("Already at the first track.")
 
     def update_player_status(self):
         # Called every second
@@ -171,10 +236,23 @@ class TMusicApp(App):
         
         if is_loading:
             state_str = "⏳ LOADING"
+            playstate = "Stopped"
         elif is_paused:
             state_str = "⏸️ PAUSED"
+            playstate = "Paused"
         else:
             state_str = "▶️ PLAYING"
+            playstate = "Playing"
         
+        # Don't overwrite temporary status messages like Volume/Mute if they just appeared
         bar = self.query_one(PlayerBar)
-        bar.update_status(f"{state_str} | {self.current_song_name}")
+        if hasattr(bar, 'status_text') and "Volume" not in bar.status_text and "Mute" not in bar.status_text:
+            bar.update_status(f"{state_str} | {self.current_song_name}")
+            
+        # Emit MPRIS playstate changes so GNOME knows we can be controlled by media keys
+        if not hasattr(self, '_last_playstate') or self._last_playstate != playstate:
+            self._last_playstate = playstate
+            try:
+                self.mpris.adapter.emit_properties_changed({'PlaybackStatus': playstate})
+            except Exception:
+                pass

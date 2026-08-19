@@ -1,6 +1,7 @@
 from mpris_server.server import Server
 from mpris_server.adapters import MprisAdapter
 from mpris_server import PlayState
+from mpris_server.base import dbus_emit_changes
 from gi.repository import GLib
 import threading
 
@@ -12,10 +13,22 @@ class TMusicAdapter(MprisAdapter):
         self.current_artist = "Unknown"
         self.on_next = None
         self.on_previous = None
+        self.server = None
+
+    def emit_properties_changed(self, changed_props):
+        if getattr(self, 'server', None) and getattr(self.server, 'player', None):
+            try:
+                # changed_props can be a list of strings, or a dict. 
+                # If dict, we just extract keys to let mpris_server fetch the property.
+                props = list(changed_props.keys()) if isinstance(changed_props, dict) else changed_props
+                dbus_emit_changes(self.server.player, props)
+            except Exception:
+                pass
 
     def update_metadata(self, title, artist):
         self.current_title = title
         self.current_artist = artist
+        self.emit_properties_changed({'Metadata': self.metadata()})
 
     def play(self):
         self.engine.resume()
@@ -90,6 +103,7 @@ class MPRISController:
     def __init__(self, audio_engine):
         self.adapter = TMusicAdapter(audio_engine)
         self.server = Server('tmusic', adapter=self.adapter)
+        self.adapter.server = self.server
 
     def start(self):
         self.server.publish()
