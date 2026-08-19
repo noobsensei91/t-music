@@ -9,9 +9,9 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     - name: Install dependencies
@@ -51,7 +51,7 @@ jobs:
       run: |
         ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir T-Music-Linux-x86_64.AppImage
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: T-Music-Linux
         path: T-Music-Linux-x86_64.AppImage
@@ -59,9 +59,9 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     - name: Install dependencies
@@ -79,7 +79,7 @@ jobs:
       run: |
         pyinstaller --noconfirm --onefile --add-binary "mpv-2.dll;." --collect-all textual --collect-all ytmusicapi --name T-Music run.py
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: T-Music-Windows
         path: dist/T-Music.exe
@@ -88,14 +88,14 @@ jobs:
     needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: T-Music-Linux
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: T-Music-Windows
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             T-Music-Linux-x86_64.AppImage
