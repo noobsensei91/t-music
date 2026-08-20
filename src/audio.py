@@ -1,14 +1,25 @@
+import os
+import sys
 import mpv
 
 class AudioEngine:
     def __init__(self):
-        # Initialize mpv player for audio only with native yt-dlp hook
-        self.player = mpv.MPV(
-            video=False,
-            ytdl=True,
-            ytdl_format='bestaudio/best',
-            ytdl_raw_options='cookies-from-browser=firefox,js-runtimes=node'
-        )
+        # Locate bundled yt-dlp if running from PyInstaller executable
+        meipass = getattr(sys, '_MEIPASS', None)
+        if meipass:
+            ytdl_path = os.path.join(meipass, 'yt-dlp.exe' if os.name == 'nt' else 'yt-dlp')
+            self.player = mpv.MPV(
+                video=False,
+                ytdl=True,
+                ytdl_format='bestaudio/best',
+                script_opts=f'ytdl_hook-ytdl_path={ytdl_path}'
+            )
+        else:
+            self.player = mpv.MPV(
+                video=False,
+                ytdl=True,
+                ytdl_format='bestaudio/best'
+            )
 
     def is_playing(self) -> bool:
         if self.player.core_idle:

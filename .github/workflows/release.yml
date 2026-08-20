@@ -24,8 +24,10 @@ jobs:
         pip install -r requirements.txt
     - name: Build with PyInstaller
       run: |
+        wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -O yt-dlp
+        chmod +x yt-dlp
         source .venv/bin/activate
-        pyinstaller --onefile --name tmusic --add-data "src/tmusic.tcss:src" --collect-all textual --collect-all ytmusicapi run.py
+        pyinstaller --onefile --name tmusic --add-data "src/tmusic.tcss:src" --add-binary "yt-dlp:." --collect-all textual --collect-all ytmusicapi run.py
     - name: Setup AppImage toolkit
       run: |
         wget "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
@@ -83,7 +85,8 @@ jobs:
         mv libmpv-2.dll mpv-2.dll
     - name: Build with PyInstaller
       run: |
-        pyinstaller --noconfirm --onefile --add-binary "mpv-2.dll;." --add-data "src/tmusic.tcss;src" --collect-all textual --collect-all ytmusicapi --name T-Music run.py
+        wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe -O yt-dlp.exe
+        pyinstaller --noconfirm --onefile --add-binary "mpv-2.dll;." --add-binary "yt-dlp.exe;." --add-data "src/tmusic.tcss;src" --collect-all textual --collect-all ytmusicapi --name T-Music run.py
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
