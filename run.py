@@ -1,8 +1,15 @@
+import os
+import sys
+
+# On Windows Python 3.8+, ctypes ignores the PATH env var.
+# We must explicitly add the PyInstaller _MEIPASS folder so mpv-2.dll can be found.
+if os.name == 'nt' and hasattr(sys, '_MEIPASS'):
+    os.add_dll_directory(sys._MEIPASS)
+
 from src.audio import AudioEngine
 from src.provider import MusicProvider
 from src.mpris import get_mpris_controller
 from src.tui import TMusicApp
-import sys
 
 def main():
     try:
