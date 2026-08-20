@@ -20,7 +20,10 @@ def main():
         app = TMusicApp(audio_engine=engine, music_provider=provider, mpris=mpris)
         app.run()
     except Exception as e:
-        print(f"Failed to start T-Music: {e}")
+        import traceback
+        traceback.print_exc()
+        print(f"\nFailed to start T-Music: {e}")
+        input("Press Enter to exit...")
         sys.exit(1)
 
 if __name__ == "__main__":
