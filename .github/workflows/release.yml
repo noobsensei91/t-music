@@ -85,7 +85,7 @@ jobs:
         mv libmpv-2.dll mpv-2.dll
     - name: Build with PyInstaller
       run: |
-        wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe -O yt-dlp.exe
+        curl.exe -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe -o yt-dlp.exe
         pyinstaller --noconfirm --onefile --add-binary "mpv-2.dll;." --add-binary "yt-dlp.exe;." --add-data "src/tmusic.tcss;src" --collect-all textual --collect-all ytmusicapi --name T-Music run.py
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
